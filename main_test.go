@@ -128,3 +128,59 @@ func TestAddRejectsEmptyTitleWithoutChangingDatabase(t *testing.T) {
 		t.Fatalf("second valid add stdout = %q, want %q", second.stdout, "added 2\n")
 	}
 }
+
+func TestInvalidInvocationsShowUsageWithoutDatabase(t *testing.T) {
+	binary := buildTodo(t)
+
+	for _, args := range [][]string{nil, {"nope"}} {
+		result := runTodo(t, binary, "", args...)
+		exitError, ok := result.err.(*exec.ExitError)
+		if !ok {
+			t.Fatalf("todo %v error = %v, want exit error", args, result.err)
+		}
+		if exitError.ExitCode() != 2 {
+			t.Fatalf("todo %v exit code = %d, want 2", args, exitError.ExitCode())
+		}
+		if result.stdout != "" {
+			t.Fatalf("todo %v stdout = %q, want empty", args, result.stdout)
+		}
+		if result.stderr != "usage: todo <add|list|done>\n" {
+			t.Fatalf("todo %v stderr = %q, want usage", args, result.stderr)
+		}
+	}
+}
+
+func TestAddRejectsNewlineInTitleWithoutChangingDatabase(t *testing.T) {
+	binary := buildTodo(t)
+	database := filepath.Join(t.TempDir(), "todos.json")
+
+	seed := runTodo(t, binary, database, "add", "Keep me")
+	if seed.err != nil {
+		t.Fatalf("seed add: %v, stderr %q", seed.err, seed.stderr)
+	}
+	before, err := os.ReadFile(database)
+	if err != nil {
+		t.Fatalf("read database before rejected add: %v", err)
+	}
+
+	for _, title := range []string{"first\nsecond", "first\rsecond"} {
+		rejected := runTodo(t, binary, database, "add", title)
+		if rejected.err == nil {
+			t.Fatalf("add %q succeeded, want non-zero exit", title)
+		}
+		if rejected.stdout != "" {
+			t.Fatalf("add %q stdout = %q, want empty", title, rejected.stdout)
+		}
+		if rejected.stderr != "title must not contain newlines\n" {
+			t.Fatalf("add %q stderr = %q, want newline error", title, rejected.stderr)
+		}
+	}
+
+	after, err := os.ReadFile(database)
+	if err != nil {
+		t.Fatalf("read database after rejected adds: %v", err)
+	}
+	if !bytes.Equal(after, before) {
+		t.Fatalf("database changed after rejected adds:\nbefore: %s\nafter:  %s", before, after)
+	}
+}

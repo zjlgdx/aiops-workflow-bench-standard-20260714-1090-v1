@@ -30,16 +30,19 @@ func runCLI(args []string, databasePath string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	if databasePath == "" {
-		fmt.Fprintln(stderr, "TODO_DB must be set")
-		return 1
-	}
-
 	switch {
 	case len(args) == 2 && args[0] == "add":
+		if databasePath == "" {
+			fmt.Fprintln(stderr, "TODO_DB must be set")
+			return 1
+		}
 		title := strings.TrimSpace(args[1])
 		if title == "" {
 			fmt.Fprintln(stderr, "title must not be empty")
+			return 1
+		}
+		if strings.ContainsAny(title, "\r\n") {
+			fmt.Fprintln(stderr, "title must not contain newlines")
 			return 1
 		}
 
@@ -60,6 +63,10 @@ func runCLI(args []string, databasePath string, stdout, stderr io.Writer) int {
 		return 0
 
 	case len(args) == 1 && args[0] == "list":
+		if databasePath == "" {
+			fmt.Fprintln(stderr, "TODO_DB must be set")
+			return 1
+		}
 		state, err := loadDatabase(databasePath)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
