@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -62,7 +63,52 @@ func runCLI(args []string, databasePath string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "added %d\n", item.ID)
 		return 0
 
-	case len(args) == 1 && args[0] == "list":
+	case len(args) == 1 && args[0] == "done":
+		fmt.Fprintln(stderr, "todo ID is required")
+		return 1
+
+	case len(args) == 2 && args[0] == "done":
+		id, err := strconv.Atoi(args[1])
+		if err != nil || id <= 0 {
+			fmt.Fprintf(stderr, "invalid todo ID %q\n", args[1])
+			return 1
+		}
+		if databasePath == "" {
+			fmt.Fprintln(stderr, "TODO_DB must be set")
+			return 1
+		}
+		state, err := loadDatabase(databasePath)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		for index := range state.Todos {
+			if state.Todos[index].ID != id {
+				continue
+			}
+			if state.Todos[index].Status != "done" {
+				state.Todos[index].Status = "done"
+				if err := saveDatabase(databasePath, state); err != nil {
+					fmt.Fprintln(stderr, err)
+					return 1
+				}
+			}
+			fmt.Fprintf(stdout, "completed %d\n", id)
+			return 0
+		}
+		fmt.Fprintf(stderr, "todo %d not found\n", id)
+		return 1
+
+	case len(args) == 1 && args[0] == "list",
+		len(args) == 3 && args[0] == "list" && args[1] == "--status":
+		status := ""
+		if len(args) == 3 {
+			status = args[2]
+			if status != "active" && status != "done" {
+				fmt.Fprintf(stderr, "unsupported status %q; want active or done\n", status)
+				return 1
+			}
+		}
 		if databasePath == "" {
 			fmt.Fprintln(stderr, "TODO_DB must be set")
 			return 1
@@ -76,6 +122,9 @@ func runCLI(args []string, databasePath string, stdout, stderr io.Writer) int {
 			return state.Todos[i].ID < state.Todos[j].ID
 		})
 		for _, item := range state.Todos {
+			if status != "" && item.Status != status {
+				continue
+			}
 			fmt.Fprintf(stdout, "%d\t%s\t%s\n", item.ID, item.Status, item.Title)
 		}
 		return 0
